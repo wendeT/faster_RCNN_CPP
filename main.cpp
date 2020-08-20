@@ -6,10 +6,31 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <iterator> 
+#include "tensorflow/cc/ops/const_op.h"
+#include "tensorflow/cc/ops/image_ops.h"
+#include "tensorflow/cc/ops/standard_ops.h"
+#include "tensorflow/core/framework/graph.pb.h"
+#include "tensorflow/core/framework/tensor.h"
+#include "tensorflow/core/graph/default_device.h"
+#include "tensorflow/core/graph/graph_def_builder.h"
+#include "tensorflow/core/lib/core/errors.h"
+#include "tensorflow/core/lib/core/stringpiece.h"
+#include "tensorflow/core/lib/core/threadpool.h"
+#include "tensorflow/core/lib/io/path.h"
+#include "tensorflow/core/lib/strings/str_util.h"
+#include "tensorflow/core/lib/strings/stringprintf.h"
+#include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/platform/init_main.h"
+#include "tensorflow/core/platform/logging.h"
+#include "tensorflow/core/platform/types.h"
+#include "tensorflow/core/public/session.h"
 
 
+using tensorflow::Tensor;
+using namespace tensorflow;
+using namespace tensorflow::ops;
 
- std::vector<std::map> get_data(std::string input_path){
+ std::vector<std::string> get_data(std::string input_path){
     bool found_bg = false;
     std::map<std::string, std::map<std::string, std::string>> all_imgs {};
     std::map<std::string, int> classes_count {}; 
@@ -96,34 +117,126 @@
         temp_mp.insert(std::pair("x2", x2));
         temp_mp.insert(std::pair("y1", y1));
         temp_mp.insert(std::pair("y2", y2));
-        all_imgs[filename]["bboxes"] = temp_mp;  
+        //all_imgs[filename]["bboxes"] = temp_mp;  
     }
 
     std::vector <std::string>all_data {};
    
-    for (auto const& [key, val] : all_imgs )
+    for (auto i : all_imgs )
     {
-        all_data.push_back(val);
+        all_data.push_back(i.first);
       
     }
     // make sure the bg class is last in the list
+    std::vector <std::string> key_to_switch_temp {};
+    std::string key_to_switch;
     if (found_bg){
         	if (class_mapping["bg"] != class_mapping.size() - 1){
-                key_to_switch = [key for key in class_mapping.keys() if class_mapping[key] == len(class_mapping)-1][0]
-				val_to_switch = class_mapping['bg']
-				class_mapping['bg'] = len(class_mapping) - 1
-				class_mapping[key_to_switch] = val_to_switch
+                 for (auto i : class_mapping) {
+                       if  (i.second==class_mapping.size()-1)
+                                key_to_switch_temp.push_back(i.first);
+                                  }
+                key_to_switch = key_to_switch_temp[0];
+				int val_to_switch = class_mapping["bg"];
+				class_mapping["bg"] = class_mapping.size() - 1;
+				class_mapping[key_to_switch] = val_to_switch;
             }		
     }
-    std::vector<std::map> temp_all {all_data, classes_count, class_mapping};
-   
-    return temp_all;
 
-
+    //std::vector<std::map> temp_all {all_data, classes_count, class_mapping}; //Fix this 
+    return all_data;
 }
 	
 	
+int get_output_length(int input_length){
+     return int (input_length/16);
+}
+       
+std::vector <int> get_img_output_length(int width, int height){
+    std::vector <int> temp {get_output_length( width), get_output_length( height)}
+    return temp; 
+}
 
+Output nn_base( Tensor input_tensor, bool trainable=false){
+
+   //input_shape = (None, None, 3);
+    //auto input_shape = {0,0,3};
+    Tensor input_shape(DT_FLOAT, TensorShape({3}));
+  
+   int bn_axis = 3;
+   TensorShape sp({3});
+   Scope scope = tensorflow::Scope::NewRootScope();
+   std::map<std::string, Output> m_vars;
+   std::string idx;
+   m_vars["W"+idx] = Variable(scope.WithOpName("W"), sp, DT_FLOAT);
+   Input img_input;
+
+    // Block 1
+    // auto conv = Conv2D(scope.WithOpName("Conv"), input, m_vars["W"+idx], {1, 1, 1, 1}, "SAME");- c++
+    auto x = Conv2D(scope.WithOpName(64,"block1_conv1"), img_input,m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(64, (3, 3), activation='relu', padding='same', name='block1_conv1')(img_input) -python 
+
+    // auto conv = Conv2D(scope.WithOpName("Conv"), input, m_vars["W"+idx], {1, 1, 1, 1}, "SAME");- c++
+    x = Conv2D(scope.WithOpName(64,"block1_conv2"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(64, (3, 3), activation='relu', padding='same', name='block1_conv2')(x)
+    
+    //MaxPool(scope.WithOpName("Pool"), relu, {1, 2, 2, 1}, {1, 2, 2, 1}, "SAME"); - c++
+    //f - x = MaxPool(scope.WithOpName("block1_pool"), x,{2,2}, {2,2}, "SAME");
+    //x = MaxPooling2D((2, 2), strides=(2, 2), name='block1_pool')(x) -python 
+    
+    // Block 2
+     auto x = Conv2D(scope.WithOpName(128,"block2_conv1"), x,m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(128, (3, 3), activation='relu', padding='same', name='block2_conv1')(x)
+
+    auto x = Conv2D(scope.WithOpName(128,"block2_conv2"), x,m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(128, (3, 3), activation='relu', padding='same', name='block2_conv2')(x)
+
+      //f - x = MaxPool(scope.WithOpName("block2_pool"), x,{2,2}, {2,2}, "SAME");
+    //x = MaxPooling2D((2, 2), strides=(2, 2), name='block2_pool')(x)
+        
+    // Block 3
+     x = Conv2D(scope.WithOpName(256,"block3_conv1"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(256, (3, 3), activation='relu', padding='same', name='block3_conv1')(x)
+
+     x = Conv2D(scope.WithOpName(256,"block3_conv2"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(256, (3, 3), activation='relu', padding='same', name='block3_conv2')(x)
+
+     x = Conv2D(scope.WithOpName(256,"block3_conv3"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(256, (3, 3), activation='relu', padding='same', name='block3_conv3')(x)
+
+     //f - x = MaxPool(scope.WithOpName("block3_pool"), x,{2,2}, {2,2}, "SAME");
+    //x = MaxPooling2D((2, 2), strides=(2, 2), name='block3_pool')(x)
+
+    // Block 4
+     x = Conv2D(scope.WithOpName(512,"block4_conv1"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block4_conv1')(x)
+
+     x = Conv2D(scope.WithOpName(512,"block4_conv2"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block4_conv2')(x)
+
+    x = Conv2D(scope.WithOpName(512,"block4_conv2"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block4_conv3')(x)
+
+     //f - x = MaxPool(scope.WithOpName("block4_pool"), x,{2,2}, {2,2}, "SAME");
+    //x = MaxPooling2D((2, 2), strides=(2, 2), name='block4_pool')(x)
+
+    // Block 5
+     x = Conv2D(scope.WithOpName(512,"block5_conv1"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block5_conv1')(x)
+
+     x = Conv2D(scope.WithOpName(512,"block5_conv2"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block5_conv2')(x)
+
+    x = Conv2D(scope.WithOpName(512,"block5_conv3"), x, m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), activation='relu', padding='same', name='block5_conv3')(x)
+  
+    return x;
+}
+
+
+     
+
+   
 
 int main(int argc, char** argv){
 
