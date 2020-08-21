@@ -24,8 +24,9 @@
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/public/session.h"
-
-
+#include "tensorflow/cc/ops/image_ops.h"
+#include "RoiPoolingConv.h"
+#include <algorithm> 
 using tensorflow::Tensor;
 using namespace tensorflow;
 using namespace tensorflow::ops;
@@ -153,7 +154,7 @@ int get_output_length(int input_length){
 }
        
 std::vector <int> get_img_output_length(int width, int height){
-    std::vector <int> temp {get_output_length( width), get_output_length( height)}
+    std::vector <int> temp {get_output_length( width), get_output_length( height)};
     return temp; 
 }
 
@@ -169,7 +170,7 @@ Output nn_base( Tensor input_tensor, bool trainable=false){
    std::map<std::string, Output> m_vars;
    std::string idx;
    m_vars["W"+idx] = Variable(scope.WithOpName("W"), sp, DT_FLOAT);
-   Input img_input;
+   Tensor img_input;
 
     // Block 1
     // auto conv = Conv2D(scope.WithOpName("Conv"), input, m_vars["W"+idx], {1, 1, 1, 1}, "SAME");- c++
@@ -234,9 +235,72 @@ Output nn_base( Tensor input_tensor, bool trainable=false){
 }
 
 
-     
+std::vector <Tensor> rpn_layer(Tensor base_layers, int num_anchors){
+     Scope scope = tensorflow::Scope::NewRootScope();
+     std::map<std::string, Output> m_vars;
+    std::string idx;
+     auto x = Conv2D(scope.WithOpName(512,"rpn_conv1"), base_layers,m_vars["W"+idx], {3,3}, "SAME");
+    //x = Conv2D(512, (3, 3), padding='same', activation='relu', kernel_initializer='normal', name='rpn_conv1')(base_layers)
 
-   
+    auto x_class = Conv2D(scope.WithOpName(num_anchors,"rpn_out_class"), base_layers,m_vars["W"+idx], {1,1}, "SAME");
+    //x_class = Conv2D(num_anchors, (1, 1), activation='sigmoid', kernel_initializer='uniform', name='rpn_out_class')(x)
+    
+    auto x_regr = Conv2D(scope.WithOpName(num_anchors,"rpn_out_regress"), base_layers,m_vars["W"+idx], {1,1}, "SAME");
+    //x_regr = Conv2D(num_anchors * 4, (1, 1), activation='linear', kernel_initializer='zero', name='rpn_out_regress')(x)
+
+    std::vector <Tensor> temp {x_class, x_regr, base_layers};
+    return temp ;
+}  
+
+
+std::vector <Tensor> classifier_layer(Tensor base_layers, std::vector <int> input_rois, int num_rois, int nb_classes = 4){
+    std::vector <int>input_shape {num_rois,7,7,512};
+    //input_shape = (num_rois,7,7,512)
+     int  pooling_regions = 7;
+
+    // out_roi_pool = RoiPoolingConv(pooling_regions, num_rois)([base_layers, input_rois]);
+
+    // Couldn't find c++ equivalent for TimeDistributed 
+    //out = TimeDistributed(Flatten(name='flatten'))(out_roi_pool)
+    // out = TimeDistributed(Dense(4096, activation='relu', name='fc1'))(out)
+    // out = TimeDistributed(Dropout(0.5))(out)
+    // out = TimeDistributed(Dense(4096, activation='relu', name='fc2'))(out)
+    // out = TimeDistributed(Dropout(0.5))(out)
+    //out_class = TimeDistributed(Dense(nb_classes, activation='softmax', kernel_initializer='zero'), name='dense_class_{}'.format(nb_classes))(out)
+    // out_regr = TimeDistributed(Dense(4 * (nb_classes-1), activation='linear', kernel_initializer='zero'), name='dense_regress_{}'.format(nb_classes))(out)
+    //return [out_class, out_regr];
+}  
+
+
+int union_renamed(std::vector <int> au, std::vector <int> bu, int area_intersection){
+
+    int area_a = (au[2] - au[0]) * (au[3] - au[1]);
+	int area_b = (bu[2] - bu[0]) * (bu[3] - bu[1]);
+	int area_union = area_a + area_b - area_intersection;
+	return area_union;
+}
+	
+
+int  intersection(std::vector <int> ai, std::vector <int> bi){
+    int x = std::max(ai[0], bi[0]);
+	int y = std::max(ai[1], bi[1]);
+	int w = std::min(ai[2], bi[2]) - x;
+	int h = std::min(ai[3], bi[3]) - y;
+	if (w < 0 || h < 0)
+		return 0;
+	return w*h;
+}
+
+
+float  iou(std::vector <int> a, std::vector <int> b){
+    // a and b should be (x1,y1,x2,y2)
+	if (a[0] >= a[2]) || (a[1] >= a[3]) || (b[0] >= b[2]) || (b[1] >= b[3])
+		return 0.0;	
+    int area_i = intersection(a, b);
+	int area_u = union_renamed(a, b, area_i);
+	return float(area_i) / float(area_u + 1e-6);
+}
+	
 
 int main(int argc, char** argv){
 
