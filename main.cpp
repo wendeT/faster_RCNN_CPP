@@ -26,6 +26,7 @@
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/cc/ops/image_ops.h"
 #include "RoiPoolingConv.h"
+#include "Config.h"
 #include <algorithm> 
 using tensorflow::Tensor;
 using namespace tensorflow;
@@ -301,6 +302,57 @@ float  iou(std::vector <int> a, std::vector <int> b){
 	return float(area_i) / float(area_u + 1e-6);
 }
 	
+
+void calc_rpn(Config C,std::map<std::string, std::string> img_data, int width, int height, int resized_width, int resized_height){
+
+ float downscale = float(C.rpn_stride) ;
+ std::vector<int> anchor_sizes = C.anchor_box_scales;   // 128, 256, 512
+ std::vector<std::vector<double>> anchor_ratios = C.anchor_box_ratios;  // 1:1, 1:2*sqrt(2), 2*sqrt(2):1
+ int num_anchors = anchor_sizes.size() * anchor_ratios.size(); // 3x3=9
+ // calculate the output map size based on the network architecture
+ int output_width = get_img_output_length(resized_width,resized_height)[0];
+ int output_height =get_img_output_length(resized_width,resized_height)[1];
+
+ int n_anchratios = anchor_ratios.size();    // 3
+ 
+ // initialise empty output objectives
+     cv::Mat y_rpn_overlap = cv::Mat::zeros(output_height, output_height, num_anchors);
+     cv::Mat y_is_box_valid = cv::Mat::zeros(output_height, output_width, num_anchors);
+     cv::Mat y_rpn_regr = cv::Mat::zeros(output_height, output_width, num_anchors * 4);
+     int num_bboxes = img_data["bboxes"].size();
+
+
+    cv::Mat num_anchors_for_bbox = cv::Mat::zeros(num_bboxes,1,1);
+    //num_anchors_for_bbox = np.zeros(num_bboxes).astype(int)
+
+    cv::Mat best_anchor_for_bbox = cv::Mat::ones(num_bboxes,4,1);
+	//best_anchor_for_bbox = -1*np.ones((num_bboxes, 4)).astype(int)
+
+	 cv::Mat best_iou_for_bbox = cv::Mat::zeros(num_bboxes,1,1.0);
+    //best_iou_for_bbox = np.zeros(num_bboxes).astype(np.float32)
+
+     cv::Mat best_x_for_bbox = cv::Mat::zeros(num_bboxes,4,1);
+	//best_x_for_bbox = np.zeros((num_bboxes, 4)).astype(int)
+
+    cv::Mat best_dx_for_bbox = cv::Mat::zeros(num_bboxes, 4,1.0);
+	//best_dx_for_bbox = np.zeros((num_bboxes, 4)).astype(np.float32)
+
+    // get the GT box coordinates, and resize to account for image resizing
+    cv::Mat gta = cv::Mat::zeros(num_bboxes,4,1);
+    // for (auto i : all_imgs )
+	//for bbox_num, bbox in enumerate(img_data['bboxes']):
+    for (auto i : img_data ){
+        // get the GT box coordinates, and resize to account for image resizing
+		/*gta.at(i.first, 0) =  i.second["x1"] * (resized_width / float(width));
+		gta[i.first, 1] = bbox["x2"] * (resized_width / float(width));
+		gta[i.first, 2] = bbox["y1"] * (resized_height / float(height));
+		gta[i.first, 3] = bbox["y2"] * (resized_height / float(height)); */
+    }
+		
+	
+	// rpn ground truth
+}
+
 
 int main(int argc, char** argv){
 
