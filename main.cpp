@@ -293,7 +293,7 @@ int  intersection(std::vector <int> ai, std::vector <int> bi){
 }
 
 
-float  iou(std::vector <int> a, std::vector <int> b){
+float iou(std::vector <int> a, std::vector <int> b){
     // a and b should be (x1,y1,x2,y2)
 	if (a[0] >= a[2]) || (a[1] >= a[3]) || (b[0] >= b[2]) || (b[1] >= b[3])
 		return 0.0;	
@@ -353,6 +353,50 @@ void calc_rpn(Config C,std::map<std::string, std::string> img_data, int width, i
 	// rpn ground truth
 }
 
+
+std::vector <int > get_new_img_size(int width, int height, int img_min_side=300){
+    int resized_height,resized_width;
+    if (width <= height){
+        float f = float(img_min_side) / width;
+		 resized_height = int(f * height);
+		 resized_width = img_min_side;
+    }
+	
+	else{
+        float f = float(img_min_side) / height;
+		int resized_width = int(f * width);
+		int resized_height = img_min_side;
+    }
+    std::vector <int> temp {resized_width,resized_height};
+	return temp;
+}
+
+
+std::vector <std::string> augment(std::string img_data, Config config, bool augment=true){
+    std::vector <std::string> temp {};
+    return temp;
+}
+
+
+void get_anchor_gt(std::vector <std::string>all_img_data, Config C , std::string mode="train"){
+    for (auto img_data : all_img_data){
+        //read in image, and optionally add augmentation
+       if (mode == "train"){
+           	std::string img_data_aug  = augment(img_data, C, augment=true)[0];
+            x_img =  augment(img_data, C, augment=True)[1];
+          }
+        else{
+            //img_data_aug, x_img = augment(img_data, C, augment=False)
+        }
+				
+            (width, height) = (img_data_aug['width'], img_data_aug['height'])
+            (rows, cols, _) = x_img.shape
+
+            assert cols == width
+            assert rows == height
+
+    }
+}
 
 int main(int argc, char** argv){
 
