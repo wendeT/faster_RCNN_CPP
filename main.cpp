@@ -293,9 +293,9 @@ int  intersection(std::vector <int> ai, std::vector <int> bi){
 }
 
 
-float iou(std::vector <int> a, std::vector <int> b){
+float iou(std::vector <float> a, std::vector <float> b){
     // a and b should be (x1,y1,x2,y2)
-	if (a[0] >= a[2]) || (a[1] >= a[3]) || (b[0] >= b[2]) || (b[1] >= b[3])
+	if ((a[0] >= a[2]) ||(a[1] >= a[3]) || (b[0] >= b[2]) || (b[1] >= b[3]))
 		return 0.0;	
     int area_i = intersection(a, b);
 	int area_u = union_renamed(a, b, area_i);
@@ -303,7 +303,10 @@ float iou(std::vector <int> a, std::vector <int> b){
 }
 	
 
-void calc_rpn(Config C,std::map<std::string, std::string> img_data, int width, int height, int resized_width, int resized_height){
+std::vector <float> calc_rpn(Config C,std::map<std::string, std::map<std::string,int>> img_data, int width, int height, int resized_width, int resized_height){
+
+ //img_data holds key(string) and value (image data ) pair
+ //image_data is map with key (string) and value (map)
 
  float downscale = float(C.rpn_stride) ;
  std::vector<int> anchor_sizes = C.anchor_box_scales;   // 128, 256, 512
@@ -319,7 +322,9 @@ void calc_rpn(Config C,std::map<std::string, std::string> img_data, int width, i
      cv::Mat y_rpn_overlap = cv::Mat::zeros(output_height, output_height, num_anchors);
      cv::Mat y_is_box_valid = cv::Mat::zeros(output_height, output_width, num_anchors);
      cv::Mat y_rpn_regr = cv::Mat::zeros(output_height, output_width, num_anchors * 4);
-     int num_bboxes = img_data["bboxes"].size();
+
+
+    int num_bboxes = img_data["bboxes"].size();
 
 
     cv::Mat num_anchors_for_bbox = cv::Mat::zeros(num_bboxes,1,1);
@@ -339,19 +344,168 @@ void calc_rpn(Config C,std::map<std::string, std::string> img_data, int width, i
 
     // get the GT box coordinates, and resize to account for image resizing
     cv::Mat gta = cv::Mat::zeros(num_bboxes,4,1);
-    // for (auto i : all_imgs )
-	//for bbox_num, bbox in enumerate(img_data['bboxes']):
-    for (auto i : img_data ){
-        // get the GT box coordinates, and resize to account for image resizing
-		/*gta.at(i.first, 0) =  i.second["x1"] * (resized_width / float(width));
-		gta[i.first, 1] = bbox["x2"] * (resized_width / float(width));
-		gta[i.first, 2] = bbox["y1"] * (resized_height / float(height));
-		gta[i.first, 3] = bbox["y2"] * (resized_height / float(height)); */
+
+    
+    for (auto i : img_data["bboxes"]) {
+        gta.at<float>(0, 0) =  i.second["x1"] * (resized_width / float(width));
+        gta.at<float>(0, 1) =  i.second["x2"] * (resized_width / float(width));
+        gta.at<float>(0, 2) =  i.second["y1"] * (resized_height / float(height));
+        gta.at<float>(0, 3) =  i.second["y2"] * (resized_height / float(height));
+
     }
-		
+ 
+ //std::vector<int> x(anchor_sizes.size());
+ //std::iota(std::begin(x), std::end(x), 0); //0 is the starting number
+    // rpn ground truth
+    for (int anchor_size_idx =0;anchor_size_idx< anchor_sizes.size();anchor_size_idx++){
+         for (int anchor_ratio_idx =0;anchor_ratio_idx< n_anchratios;anchor_ratio_idx++){
+            int anchor_x = anchor_sizes[anchor_size_idx] * anchor_ratios[anchor_ratio_idx][0];
+		    int anchor_y = anchor_sizes[anchor_size_idx] * anchor_ratios[anchor_ratio_idx][1];
+
+            for (int ix=0;ix< output_width;ix++){
+                // x-coordinates of the current anchor box	
+				float x1_anc = downscale * (ix + 0.5) - anchor_x / 2;
+				float x2_anc = downscale * (ix + 0.5) + anchor_x / 2;	
+                // ignore boxes that go across image boundaries					
+				if ((x1_anc < 0) || (x2_anc > resized_width))
+					continue;
+                
+                for (int jy=0; jy<output_height;jy++){
+                    // y-coordinates of the current anchor box
+					float y1_anc = downscale * (jy + 0.5) - anchor_y / 2;
+					float y2_anc = downscale * (jy + 0.5) + anchor_y / 2;
+
+                    // ignore boxes that go across image boundaries
+					if ((y1_anc < 0) || (y2_anc > resized_height))
+						continue;
+                    
+                    // bbox_type indicates whether an anchor should be a target
+					// Initialize with 'negative'
+					std::string bbox_type = "neg";
+
+					// this is the best IOU for the (x,y) coord and the current anchor
+					// note that this is different from the best IOU for a GT bbox
+					double best_iou_for_loc = 0.0;
+                    for (int bbox_num=0;bbox_num< num_bboxes;bbox_num++){
+                        // get IOU of the current GT box and the current anchor box
+                        std::vector <float> a {gta.at<float>(bbox_num, 0), gta.at<float>(bbox_num, 2), gta.at<float>(bbox_num, 1), gta.at<float>(bbox_num, 3)};
+                        std::vector <float> b {x1_anc, y1_anc, x2_anc, y2_anc};
+						float curr_iou = iou(a,b);
+						// calculate the regression targets if they will be needed
+                        float tx, ty, tw, th;
+                        // calculate the regression targets if they will be needed
+						if (curr_iou > best_iou_for_bbox.at<float>(bbox_num) || curr_iou > C.rpn_max_overlap){
+
+                            float cx = (gta.at<float>(bbox_num, 0) + gta.at<float>(bbox_num,1)) / 2.0;
+							float cy = (gta.at<float>(bbox_num, 2) + gta.at<float>(bbox_num, 3)) / 2.0;
+							float cxa = (x1_anc + x2_anc)/2.0;
+							float cya = (y1_anc + y2_anc)/2.0;
+                            // x,y are the center point of ground-truth bbox
+							// xa,ya are the center point of anchor bbox (xa=downscale * (ix + 0.5); ya=downscale * (iy+0.5))
+							// w,h are the width and height of ground-truth bbox
+							// wa,ha are the width and height of anchor bboxe
+							// tx = (x - xa) / wa
+							// ty = (y - ya) / ha
+							// tw = log(w / wa)
+							// th = log(h / ha)
+                            float tx = (cx - cxa) / (x2_anc - x1_anc);
+							float ty = (cy - cya) / (y2_anc - y1_anc);
+							float tw = log((gta.at<float>(bbox_num, 1) - gta.at<float>(bbox_num, 0)) / (x2_anc - x1_anc));
+							float th = log((gta.at<float>(bbox_num, 3) - gta.at<float>(bbox_num, 2)) / (y2_anc - y1_anc));
+                        }
+                        //img_data['bboxes'][bbox_num]['class'] != 'bg':
+                        //Complete later 
+
+                        if (true){
+                            //all GT boxes should be mapped to an anchor box, so we keep track of which anchor box was best
+                            if (curr_iou > best_iou_for_bbox.at<float>(bbox_num)){
+                            //best_anchor_for_bbox[bbox_num] = [jy, ix, anchor_ratio_idx, anchor_size_idx]
+                            //A.row(1).setTo(Scalar(value));
+                                best_anchor_for_bbox.at<float>(bbox_num) = (jy, ix, anchor_ratio_idx, anchor_size_idx);
+                                best_iou_for_bbox.at<float>(bbox_num) = (curr_iou);
+                                best_x_for_bbox.at<float>(bbox_num) = (x1_anc, x2_anc, y1_anc, y2_anc);
+                                best_dx_for_bbox.at<float>(bbox_num) = (tx, ty, tw, th);	
+                            }
+                            //we set the anchor to positive if the IOU is >0.7 (it does not matter if there was another better box, it just indicates overlap)
+                            if (curr_iou > C.rpn_max_overlap){
+                                bbox_type = "pos";
+								num_anchors_for_bbox.at<float>(bbox_num) += 1;
+								// we update the regression layer target if this IOU is the best for the current (x,y) and anchor position
+								if (curr_iou > best_iou_for_loc){
+                                    best_iou_for_loc = curr_iou;
+									std::vector <float> best_regr {tx, ty, tw, th};
+                                }
+									
+                            }
+                            // if the IOU is >0.3 and <0.7, it is ambiguous and no included in the objective
+							if (C.rpn_min_overlap < curr_iou < C.rpn_max_overlap){
+                                // gray zone between neg and pos
+								if (bbox_type != "pos")
+									bbox_type = "neutral";
+                            }
+                        }
+                    }
+                    // turn on or off outputs depending on IOUs
+					if(bbox_type == "neg") {
+                        y_is_box_valid .at<float>(jy, ix, anchor_ratio_idx + n_anchratios * anchor_size_idx) = 1;
+						y_rpn_overlap.at<float>(jy, ix, anchor_ratio_idx + n_anchratios * anchor_size_idx) = 0;
+                    }
+					else if (bbox_type == "neutral"){
+                        y_is_box_valid.at<float>(jy, ix, anchor_ratio_idx + n_anchratios * anchor_size_idx) = 0;
+						y_rpn_overlap.at<float>(jy, ix, anchor_ratio_idx + n_anchratios * anchor_size_idx) = 0;
+                    }
+						
+					else if (bbox_type == "pos"){
+                        y_is_box_valid.at<float>(jy, ix, anchor_ratio_idx + n_anchratios * anchor_size_idx) = 1;
+						y_rpn_overlap.at<float>(jy, ix, anchor_ratio_idx + n_anchratios * anchor_size_idx) = 1;
+						float start = 4 * (anchor_ratio_idx + n_anchratios * anchor_size_idx);
+                        std::vector <float >best_regr;
+						y_rpn_regr.at<float>(jy, ix, start,start+4) = best_regr;
+                    }			
+                }		
+            }					
+         }
+    }
 	
-	// rpn ground truth
+    // we ensure that every bbox has at least one positive RPN region
+    for (int idx;idx<num_anchors_for_bbox.rows;idx++){
+        if (num_anchors_for_bbox.at<float>(idx) == 0){
+            // no box with an IOU greater than zero ...
+            if (best_anchor_for_bbox.at<float>(idx, 0)== -1);
+				continue;
+            y_is_box_valid.at<float>(best_anchor_for_bbox.at<float>(idx,0), best_anchor_for_bbox.at<float>(idx,1), best_anchor_for_bbox.at<float>(idx,2) + n_anchratios *best_anchor_for_bbox.at<float>(idx,3))= 1;
+            y_rpn_overlap.at<float>(best_anchor_for_bbox.at<float>(idx,0), best_anchor_for_bbox.at<float>(idx,1), best_anchor_for_bbox.at<float>(idx,2) + n_anchratios *best_anchor_for_bbox.at<float>(idx,3)) = 1;
+            float start = 4 * (best_anchor_for_bbox.at<float>(idx,2) + n_anchratios * best_anchor_for_bbox.at<float>(idx,3));
+            y_rpn_regr.at<float>(best_anchor_for_bbox.at<float>(idx,0), best_anchor_for_bbox.at<float>(idx,1), start,start+4) = best_dx_for_bbox.at<float>(idx);
+        }
+    }
+    //y_rpn_overlap = np.transpose(y_rpn_overlap, (2, 0, 1))
+    //y_rpn_overlap = np.expand_dims(y_rpn_overlap, axis=0)
+    cv::Mat y_rpn_overlap_temp = y_rpn_overlap;
+    cv::transpose(y_rpn_overlap_temp,y_rpn_overlap);
+
+    cv::Mat y_is_box_valid_temp = y_is_box_valid;
+    cv::transpose(y_is_box_valid_temp,y_is_box_valid);
+	
+    cv::Mat y_rpn_regr_temp = y_rpn_regr;
+	cv::transpose(y_rpn_regr_temp,y_rpn_regr);
+    /* if len(pos_locs[0]) > num_regions/2:
+		val_locs = random.sample(range(len(pos_locs[0])), len(pos_locs[0]) - num_regions/2)
+		y_is_box_valid[0, pos_locs[0][val_locs], pos_locs[1][val_locs], pos_locs[2][val_locs]] = 0
+		num_pos = num_regions/2
+
+	if len(neg_locs[0]) + num_pos > num_regions:
+		val_locs = random.sample(range(len(neg_locs[0])), len(neg_locs[0]) - num_pos)
+		y_is_box_valid[0, neg_locs[0][val_locs], neg_locs[1][val_locs], neg_locs[2][val_locs]] = 0
+
+	y_rpn_cls = np.concatenate([y_is_box_valid, y_rpn_overlap], axis=1)
+	y_rpn_regr = np.concatenate([np.repeat(y_rpn_overlap, 4, axis=1), y_rpn_regr], axis=1) */
+
+   std::vector <float> temp_final {0.0,0.0,0.0};
+	//return np.copy(y_rpn_cls), np.copy(y_rpn_regr), num_pos
+    return temp_final;      
 }
+
 
 
 std::vector <int > get_new_img_size(int width, int height, int img_min_side=300){
