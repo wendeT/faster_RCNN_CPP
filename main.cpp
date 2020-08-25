@@ -6,6 +6,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <iterator> 
+#include <assert.h>   
+
 #include "tensorflow/cc/ops/const_op.h"
 #include "tensorflow/cc/ops/image_ops.h"
 #include "tensorflow/cc/ops/standard_ops.h"
@@ -526,31 +528,118 @@ std::vector <int > get_new_img_size(int width, int height, int img_min_side=300)
 }
 
 
-std::vector <std::string> augment(std::string img_data, Config config, bool augment=true){
+std::vector <std::string> augment(std::map<std::string, std::map<std::string,int>> img_data, Config config, bool augment=true){
+    
+    //img_data is a map with key - string and value image data
+    assert  (img_data.find("filepath")!=img_data.end());
+    assert  (img_data.find("bboxes")!=img_data.end());
+    assert  (img_data.find("width")!=img_data.end());
+    assert  (img_data.find("height")!=img_data.end());
+    
+    std::map<std::string, std::map<std::string,int>> img_data_aug;
+    img_data_aug.insert(img_data.begin(), img_data.end());
+
+    cv::Mat img;
+    std::map<std::string,string> temp_filepath;
+    temp_filepath = img_data_aug.at("filepath");
+    img = cv::imread(temp_filepath.at("filepath"));  
+    if (augment){
+        // rows, cols = img.shape[:2]
+        int rows = img.rows;
+        int cols = img.cols;
+
+        if (config.use_horizontal_flips && rand()%2 == 0){
+            //img = cv2.flip(img, 1)
+            cv::flip(img, img, +1);
+            std::map<std::string,int> temp_bboxes;
+            temp_bboxes = img_data_aug.at("bboxes");
+            // for (auto& x : temp_bboxes) {
+            int x1 = temp_bboxes.at("x1");
+            int x2 = temp_bboxes.at("x2");
+
+           temp_bboxes["x2"] = cols - x1;
+           temp_bboxes["x1"] = cols - x2;
+
+        }
+
+        if (config.use_vertical_flips && rand()%2 == 0){
+                cv::flip(img, img, 0);
+                std::map<std::string,int> temp_bboxes;
+                temp_bboxes = img_data_aug.at("bboxes");
+                // for (auto& x : temp_bboxes) {
+                int y1 = temp_bboxes.at("y1");
+                int y2 = temp_bboxes.at("y2");
+                temp_bboxes["y2"] = cols - y1;
+                temp_bboxes["y1"] = cols - y2;
+        }
+        if (config.rot_90){
+            std::vector <int > rand_list {0,90,180,270};
+            int angle = rand_list[rand()%4];
+            if (angle == 270){
+                cv::Mat img_temp = img;
+                cv::transpose(img_temp,img);
+				cv::flip(img_temp, img_temp, 0);
+                img = img_temp;
+            }
+				
+			else if (angle == 180){
+                cv::flip(img, img, -1);
+            }
+			else if (angle == 90){
+                cv::Mat img_temp = img;
+                cv::transpose(img_temp,img);
+				cv::flip(img_temp, img_temp, 1);
+                img = img_temp;
+            }
+			else if (angle == 0){
+                std::cout <<"do nothing";
+            }	
+            //for bbox in img_data_aug['bboxes']{
+            std::map<std::string,int> temp_bboxes1;
+            temp_bboxes1 = img_data_aug.at("bboxes");
+            int x1 =  temp_bboxes1.at("x1");
+            int x2 = temp_bboxes1.at("x2");
+            int y1 = temp_bboxes1.at("y1");
+            int y2 = temp_bboxes1.at("y2");
+            if (angle == 270){
+                temp_bboxes1["x1"] = y1;
+                temp_bboxes1["x2"] = y2;
+                temp_bboxes1["y1"] = cols - x2;
+                temp_bboxes1["y2"] = cols - x1;
+            }
+                
+            else if (angle == 180){
+                temp_bboxes1["x2"] = cols - x1;
+                temp_bboxes1["x1"] = cols - x2;
+                temp_bboxes1["y2"] = rows - y1;
+                temp_bboxes1["y1"] =  rows - y2;
+            }
+                
+            else if (angle == 90){
+                temp_bboxes1["x1"] = rows - y2;
+                temp_bboxes1["x2"] = rows - y1;
+                temp_bboxes1["y1"] = x1;
+                temp_bboxes1["y2"] =  x2;
+            }
+                     
+            else if (angle == 0){
+                std::cout <<"do nothing";
+            }
+            		
+        }
+
+       
+    }
+    cv::Size s = img.size();
+	img_data_aug.at("width") = s.width;
+	img_data_aug.at("height") = s.height;
+	//return img_data_aug, img	
     std::vector <std::string> temp {};
+    //Check how tp return a container with map and cv 
     return temp;
 }
 
 
-void get_anchor_gt(std::vector <std::string>all_img_data, Config C , std::string mode="train"){
-    for (auto img_data : all_img_data){
-        //read in image, and optionally add augmentation
-       if (mode == "train"){
-           	std::string img_data_aug  = augment(img_data, C, augment=true)[0];
-            x_img =  augment(img_data, C, augment=True)[1];
-          }
-        else{
-            //img_data_aug, x_img = augment(img_data, C, augment=False)
-        }
-				
-            (width, height) = (img_data_aug['width'], img_data_aug['height'])
-            (rows, cols, _) = x_img.shape
-
-            assert cols == width
-            assert rows == height
-
-    }
-}
 
 int main(int argc, char** argv){
 
