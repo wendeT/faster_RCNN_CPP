@@ -5,6 +5,8 @@
 #include <fstream>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
+
 #include <iterator> 
 #include <assert.h>   
 
@@ -640,9 +642,87 @@ std::vector <std::string> augment(std::map<std::string, std::map<std::string,int
 }
 
 
+void get_anchor_gt(std::vector <std::string>all_img_data, Config C, std::string mode="train"){
+    //std::map<std::string, std::map<std::string,int>> img_data
+    
+    for (auto &img_data:all_img_data){
+        // read in image, and optionally add augmentation
+        cv::Mat img_data_aug;
+        cv::Mat x_img;
+        std::map<std::string, std::map<std::string,int>> img_data1; //Change this later to img_data
+        if (mode == "train"){
+            std::vector <std::string> temp = augment(img_data1, C, true);
+            std::vector<cv::Mat> temp1;
+            img_data_aug = temp1[0]; //Change this to temp later 
+            x_img = temp1[1];   //Change this to temp later 
+        }
+        else{
+            std::vector <std::string> temp = augment(img_data1, C, false);
+            std::vector<cv::Mat> temp1;
+            cv::Mat img_data_aug = temp1[0]; //Change this to temp later 
+            cv::Mat x_img = temp1[1];   //Change this to temp later 
+            //img_data_aug, x_img = augment(img_data, C, augment=False)
+        }
+        cv::Size s = img_data_aug.size();
+        int width = s.width;
+        int height =  s.height;
+    
+        //(rows, cols, _) = x_img.shape
+		int rows = 	x_img.rows;
+        int cols = x_img.cols;
+        assert (cols = width);
+        assert (rows = height);
+
+        // get image dimensions for resizing
+        int resized_width = get_new_img_size(width, height, C.im_size)[0];
+        int resized_height = get_new_img_size(width, height, C.im_size)[1];
+
+        // resize the image so that smalles side is length = 300px
+       
+        cv::Mat debug_img;
+        cv::resize(x_img, debug_img, cv::Size(resized_width,resized_height),0,0);
+
+        //y_rpn_cls, y_rpn_regr, num_pos = calc_rpn(C, img_data_aug, width, height, resized_width, resized_height, img_length_calc_function)
+        std::map<std::string,int>> img_data_aug11;
+        std::vector <float> temp_calc_rpn = calc_rpn(C, img_data_aug11, width, height, resized_width, resized_height);
+        float y_rpn_cls = temp_calc_rpn[0];
+        float y_rpn_regr = temp_calc_rpn[1];
+        float num_pos = temp_calc_rpn [2];
+
+        // Zero-center by mean pixel, and preprocess image
+        //x_img = x_img[:,:, (2, 1, 0)]  # BGR -> RGB - Revise this
+        //x_img = x_img.astype(np.float32)
+
+        x_img.convertTo(x_img, CV_32F);
+
+        x_img(0) -= C.img_channel_mean[0]; //Revise this section
+        x_img(1) -= C.img_channel_mean[1];
+        x_img(2) -= C.img_channel_mean[2];
+        x_img /= C.img_scaling_factor;
+
+        cv::Mat img_temp;
+        //x_img = np.transpose(x_img, (2, 0, 1))
+         cv::transpose(img_temp,x_img);
+
+        //x_img = np.expand_dims(x_img, axis=0) //Revise this section
+        //y_rpn_regr[:, y_rpn_regr.shape[1]//2:, :, :] *= C.std_scaling
+        //x_img = np.transpose(x_img, (0, 2, 3, 1))
+        //y_rpn_cls = np.transpose(y_rpn_cls, (0, 2, 3, 1))
+        //y_rpn_regr = np.transpose(y_rpn_regr, (0, 2, 3, 1))
+        //yield np.copy(x_img), [np.copy(y_rpn_cls), np.copy(y_rpn_regr)], img_data_aug, debug_i
+          
+    }
+}
+
 
 int main(int argc, char** argv){
+    float lambda_rpn_regr = 1.0;
+    float lambda_rpn_class = 1.0;
 
+    float lambda_cls_regr = 1.0;
+    float lambda_cls_class = 1.0;
+
+    float epsilon = 1e-4;
     return 0;
 
 }
