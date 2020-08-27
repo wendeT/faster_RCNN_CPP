@@ -511,7 +511,6 @@ std::vector <float> calc_rpn(Config C,std::map<std::string, std::map<std::string
 }
 
 
-
 std::vector <int > get_new_img_size(int width, int height, int img_min_side=300){
     int resized_height,resized_width;
     if (width <= height){
@@ -528,7 +527,6 @@ std::vector <int > get_new_img_size(int width, int height, int img_min_side=300)
     std::vector <int> temp {resized_width,resized_height};
 	return temp;
 }
-
 
 std::vector <std::string> augment(std::map<std::string, std::map<std::string,int>> img_data, Config config, bool augment=true){
     
@@ -641,7 +639,6 @@ std::vector <std::string> augment(std::map<std::string, std::map<std::string,int
     return temp;
 }
 
-
 void get_anchor_gt(std::vector <std::string>all_img_data, Config C, std::string mode="train"){
     //std::map<std::string, std::map<std::string,int>> img_data
     
@@ -656,7 +653,7 @@ void get_anchor_gt(std::vector <std::string>all_img_data, Config C, std::string 
             img_data_aug = temp1[0]; //Change this to temp later 
             x_img = temp1[1];   //Change this to temp later 
         }
-        else{
+        else {
             std::vector <std::string> temp = augment(img_data1, C, false);
             std::vector<cv::Mat> temp1;
             cv::Mat img_data_aug = temp1[0]; //Change this to temp later 
@@ -713,6 +710,32 @@ void get_anchor_gt(std::vector <std::string>all_img_data, Config C, std::string 
           
     }
 }
+
+float rpn_loss_regr(int num_anchors,std::vector <float>y_true, std::vector <float>y_pred){
+    //def rpn_loss_regr_fixed_num(y_true, y_pred):
+    // Merged with rpn_loss_regr 
+    // x is the difference between true value and predicted vaue
+    //Get back to this after choosing data type for y_true
+
+}
+
+
+float rpn_loss_cls(int num_anchors){
+     //Get back to this after choosing data type for y_true
+
+}
+
+float class_loss_regr (int num_classes){
+//Get back to this after choosing data type for y_true
+
+
+}
+
+float class_loss_cls(std::vector <float>y_true, std::vector <float>y_pred){
+//Get back to this after choosing data type for y_true
+
+}
+
 
 
 int main(int argc, char** argv){
