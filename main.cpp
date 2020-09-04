@@ -9,6 +9,7 @@
 
 #include <iterator> 
 #include <assert.h>   
+#include <algorithm> 
 
 #include "tensorflow/cc/ops/const_op.h"
 #include "tensorflow/cc/ops/image_ops.h"
@@ -528,6 +529,7 @@ std::vector <int > get_new_img_size(int width, int height, int img_min_side=300)
 	return temp;
 }
 
+
 std::vector <std::string> augment(std::map<std::string, std::map<std::string,int>> img_data, Config config, bool augment=true){
     
     //img_data is a map with key - string and value image data
@@ -639,6 +641,7 @@ std::vector <std::string> augment(std::map<std::string, std::map<std::string,int
     return temp;
 }
 
+
 void get_anchor_gt(std::vector <std::string>all_img_data, Config C, std::string mode="train"){
     //std::map<std::string, std::map<std::string,int>> img_data
     
@@ -711,6 +714,7 @@ void get_anchor_gt(std::vector <std::string>all_img_data, Config C, std::string 
     }
 }
 
+
 float rpn_loss_regr(int num_anchors,std::vector <float>y_true, std::vector <float>y_pred){
     //def rpn_loss_regr_fixed_num(y_true, y_pred):
     // Merged with rpn_loss_regr 
@@ -725,17 +729,95 @@ float rpn_loss_cls(int num_anchors){
 
 }
 
+
 float class_loss_regr (int num_classes){
 //Get back to this after choosing data type for y_true
 
 
 }
 
+
 float class_loss_cls(std::vector <float>y_true, std::vector <float>y_pred){
 //Get back to this after choosing data type for y_true
 
 }
 
+
+std::vector <float> non_max_suppression_fast(std::vector<std::vector<float> > boxes, std::vector <float>probs, float overlap_thresh=0.9, int max_boxes=300){
+    //Change the type of boxes later 
+    if (boxes.size()==0){
+        std::vector <float> temp {};
+        return temp;
+    }
+    // grab the coordinates of the bounding boxes
+    std::vector<float> x1 = boxes[0];
+    std::vector<float> y1 = boxes[1];
+    std::vector<float> x2 = boxes[2];
+    std::vector<float> y2 = boxes[3];
+
+    //np.testing.assert_array_less(x1, x2) - not converted
+    //np.testing.assert_array_less(y1, y2)
+
+    // if the bounding boxes integers, convert them to floats --
+    // this is important since we'll be doing a bunch of divisions
+    // Convert it here later
+
+    // initialize the list of picked indexes	
+    std::vector <float >pick {};
+
+    // calculate the areas
+    std::vector <float>results1;
+    std::transform(x1, x2, results1, std::minus<float>()); 
+    std::vector <float>results2;
+    std::transform(y1, y2, results2, std::minus<float>()); 
+    std::vector <float> area;
+    std::transform(results1,results2,area, std::multiplies<float>()); 
+
+    // sort the bounding boxes 
+    std::vector <float>idxs;
+    //copy probs to idx before soritng
+    for (int i=0; i<probs.size(); i++) 
+        idxs.push_back(probs[i]); 
+  
+    std::sort (idxs.begin(), idxs.end());     
+    int last ;
+    float i;
+    // keep looping while some indexes still remain in the indexes
+    // list
+
+    while (idxs.size() > 0){
+        // grab the last index in the indexes list and add the
+        // index value to the list of picked indexes
+        last = idxs.size() - 1;
+        i = idxs[last];
+        pick.push_back(i);
+
+        // find the intersection
+        float xx1_int = std::max(x1[i], x1[idxs[last]]);
+        float yy1_int = std::max(y1[i], y1[idxs[last]]);
+        float xx2_int = std::max(x2[i], x2[idxs[last]]);
+        float yy2_int = std::max(y2[i], y2[idxs[last]]);
+
+        float ww_int = std::max(0, xx2_int - xx1_int);
+        float hh_int =  std::max(0, yy2_int - yy1_int);
+
+        float area_int = ww_int * hh_int;
+
+        // find the union
+        float area_union = area[i] + area[idxs[last]] - area_int;
+
+        // compute the ratio of overlap
+        float overlap = area_int/(area_union + 1e-6);
+        // delete all indexes from the index list that have
+        if (pick.size() >= max_boxes)
+            break;
+
+     }
+    // return only the bounding boxes that were picked using the integer data type
+   
+    return boxes, probs;
+        
+}
 
 
 int main(int argc, char** argv){
