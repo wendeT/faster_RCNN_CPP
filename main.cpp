@@ -6,6 +6,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2/imgproc/imgproc.hpp"
+#include <cmath>
 
 #include <iterator> 
 #include <assert.h>   
@@ -799,7 +800,7 @@ std::vector <float> non_max_suppression_fast(std::vector<std::vector<float> > bo
         float yy2_int = std::max(y2[i], y2[idxs[last]]);
 
         float ww_int = std::max(0, xx2_int - xx1_int);
-        float hh_int =  std::max(0, yy2_int - yy1_int);
+        float hh_int = std::max(0, yy2_int - yy1_int);
 
         float area_int = ww_int * hh_int;
 
@@ -817,6 +818,66 @@ std::vector <float> non_max_suppression_fast(std::vector<std::vector<float> > bo
    
     return boxes, probs;
         
+}
+
+
+void  apply_regr_np( std::vector<std::vector<float> > X, std::vector<std::vector<float> > T){
+        //X & T set as multi-dimenstional array
+        std::vector<float> x = X[0];
+        std::vector<float> y = X[1];
+        std::vector<float> w = X[2];
+        std::vector<float> h = X[3];
+
+        std::vector<float> tx = T[0];
+        std::vector<float> ty = T[1];
+        std::vector<float> tw = T[2];
+        std::vector<float> th = T[3];
+
+        //std::transform(w.begin(), w.end(), w.begin(), _1 * 0.5);
+        std::transform(w.begin(), w.end(), w.begin(),std::bind(std::multiplies(), std::placeholders::_1, 0.5));
+
+        //std::vector<float> cx = x + w;
+        std::vector<float> cx = x;
+        std::transform(cx.begin( ), cx.end( ), w.begin( ), cx.begin( ),std::plus<float>( ));
+
+
+        //std::vector<float> cy = y + (h)*0.5;
+        std::transform(h.begin(), h.end(), h.begin(),std::bind(std::multiplies(), std::placeholders::_1, 0.5));
+        std::vector<float> cy = y;
+        std::transform(cy.begin( ), cy.end( ), h.begin( ), cy.begin( ),std::plus<float>( ));
+
+
+        //std::vector<float> cx1 = tx * w + cx;
+        std::vector <float> temp_tx;
+        std::transform(tx,w,temp_tx, std::multiplies<float>()); 
+        std::vector<float> cx1 = temp_tx;
+        std::transform(cx1.begin( ), cx1.end( ), cx.begin( ), cx1.begin( ),std::plus<float>( ));
+
+
+        //std::vector<float> cy1 = ty * h + cy;
+        std::vector <float> temp_ty;
+        std::transform(ty,h,temp_ty, std::multiplies<float>()); 
+        std::vector<float> cy1 = temp_ty;
+        std::transform(cy1.begin( ), cy1.end( ), cy.begin( ), cy1.begin( ),std::plus<float>( ));
+
+
+        //float w1 = np.exp(tw.astype(np.float64)) * w
+        float temp_w1 = std::exp(tw);
+        std::vector <float> w1;
+        std::transform(temp_w1,w,w1, std::multiplies<float>()); 
+
+        //h1 = np.exp(th.astype(np.float64)) * h
+        float temp_h1 = std::exp(th);
+        std::vector <float> h1;
+        std::transform(temp_w1,h,h1, std::multiplies<float>()); 
+
+        //x1 = cx1 - w1/2.
+        std::transform(w1.begin(), w1.end(), w1.begin(),std::bind(std::multiplies(), std::placeholders::_1, 0.5));
+        std::vector<float> x1 = cx1;
+        std::transform(x1.begin( ), x1.end( ), w1.begin( ), x1.begin( ),std::minus<float>( ));
+
+        //y1 = cy1 - h1/2. not converted 
+        //return np.stack([x1, y1, w1, h1]) not converted
 }
 
 
