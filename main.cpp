@@ -881,6 +881,49 @@ void  apply_regr_np( std::vector<std::vector<float> > X, std::vector<std::vector
 }
 
 
+void  apply_regr(std::vector<float>x, std::vector<float>y, std::vector<float>w, std::vector<float>h, std::vector<float>tx, std::vector<float>ty, std::vector<float>tw, std::vector<float>th){
+    //   Apply regression to x, y, w and h
+    //cx = x + w*0.5
+    std::transform(w.begin(), w.end(), w.begin(),std::bind(std::multiplies(), std::placeholders::_1, 0.5));
+    std::vector<float> cx = x;
+    std::transform(cx.begin( ), cx.end( ), w.begin( ), cx.begin( ),std::plus<float>( ));
+    // cy = y + h*0.5
+    std::transform(h.begin(), h.end(), h.begin(),std::bind(std::multiplies(), std::placeholders::_1, 0.5));
+    std::vector<float> cy = y;
+    std::transform(cy.begin( ), cy.end( ), h.begin( ), cy.begin( ),std::plus<float>( ));
+    //cx1 = tx * w + cx
+    std::vector <float> temp_tx;
+    std::transform(tx,w,temp_tx, std::multiplies<float>()); 
+    std::vector<float> cx1 = temp_tx;
+    std::transform(cx1.begin( ), cx1.end( ), cx.begin( ), cx1.begin( ),std::plus<float>( ));
+    //cy1 = ty * h + cy
+    std::vector <float> temp_ty;
+    std::transform(ty,h,temp_ty, std::multiplies<float>()); 
+    std::vector<float> cy1 = temp_ty;
+    std::transform(cy1.begin( ), cy1.end( ), cy.begin( ), cy1.begin( ),std::plus<float>( ));
+    // w1 = math.exp(tw) * w
+    float temp_w1 = std::exp(tw);
+    std::vector <float> w1;
+    std::transform(temp_w1,w,w1, std::multiplies<float>()); 
+    //h1 = math.exp(th) * h
+    float temp_h1 = std::exp(th);
+    std::vector <float> h1;
+    std::transform(temp_h1,h,h1, std::multiplies<float>()); 
+     //x1 = cx1 - w1/2.
+    std::transform(w1.begin(), w1.end(), w1.begin(),std::bind(std::multiplies(), std::placeholders::_1, 0.5));
+    std::vector<float> x1 = cx1;
+    std::transform(x1.begin( ), x1.end( ), w1.begin( ), x1.begin( ),std::minus<float>( ));
+    //Round all values here 
+    //x1 = int(round(x1)) not converted 
+    //y1 = int(round(y1))
+    //w1 = int(round(w1))
+    //h1 = int(round(h1))
+    
+    
+}
+
+
+
 int main(int argc, char** argv){
     float lambda_rpn_regr = 1.0;
     float lambda_rpn_class = 1.0;
