@@ -1,1 +1,1 @@
-C++ implemnetation of Faster R-CNN based object detection implemented using OpenCV and Tensorflow 1.13 C++ API. I used the python vertion of the tutorial by Yinghan Xu (Faster R-CNN (object detection) implemented by Keras for custom data from Google’s Open Images Dataset V4).   
+C++ implementation of Faster R-CNN based object detection using OpenCV and Tensorflow 1.13 C++ API. I used the python version of the tutorial by Yinghan Xu (Faster R-CNN (object detection) implemented by Keras for custom data from Google’s Open Images Dataset V4).   
